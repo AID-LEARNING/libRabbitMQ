@@ -1,0 +1,12 @@
+{
+  "require-dev": {
+    "pocketmine/pocketmine-mp": "5.23.2"
+  },
+  "require": {
+    "php-amqplib/php-amqplib": "v3.7.2",
+    "php": "^8.2",
+    "ext-sockets": "*",
+    "ext-pmmpthread": "^6.0.1",
+    "ext-igbinary": "*"
+  }
+}

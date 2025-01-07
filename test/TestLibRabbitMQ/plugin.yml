@@ -1,0 +1,8 @@
+name: TestLibRabbitMQ[
+authors:
+  - SenseiTarzan
+version: 0.1
+main: SenseiTarzan\rabbitmq\Main
+api: 5.0.0
+softdepend:
+  - Middleware
