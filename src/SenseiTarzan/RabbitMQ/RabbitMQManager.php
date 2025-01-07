@@ -48,7 +48,7 @@ class RabbitMQManager
         $this->thread = new ThreadRabbitMQ($this->vendors, $this->bufferSend, $this->bufferRecv, $this->config);
 		$plugin->getScheduler()->scheduleRepeatingTask(new ClosureTask(function (): void {
             $this->readResults();
-        }), 20);
+        }), 1);
 	}
 
 	public function stopRunning(): void
