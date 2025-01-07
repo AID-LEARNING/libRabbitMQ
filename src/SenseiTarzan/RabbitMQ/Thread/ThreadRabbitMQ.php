@@ -4,11 +4,9 @@ namespace SenseiTarzan\RabbitMQ\Thread;
 
 use Composer\Autoload\ClassLoader;
 use Exception;
-use PhpAmqpLib\Channel\AMQPChannel;
 use PhpAmqpLib\Connection\AMQPStreamConnection;
+use PhpAmqpLib\Exception\AMQPChannelClosedException;
 use PhpAmqpLib\Exception\AMQPConnectionClosedException;
-use PhpAmqpLib\Exception\AMQPNoDataException;
-use PhpAmqpLib\Exception\AMQPTimeoutException;
 use PhpAmqpLib\Message\AMQPMessage;
 use pmmp\thread\Thread as NativeThread;
 use pmmp\thread\ThreadSafeArray;
@@ -60,50 +58,47 @@ class ThreadRabbitMQ extends Thread
             $connection = new AMQPStreamConnection($this->config->getHost(), $this->config->getPort(), $this->config->getUser(), $this->config->getPassword(), $this->config->getVhost());
 			$this->connCreated = true;
 		} catch (Throwable $exception){
-			$this->connError = $exception;
-			$this->connCreated = true;
 			return;
 		}
-        $connection->reconnect();
+        $exception = null;
+        $retries = 5;
+        while (!$connection->isConnected() && $retries != 0)
+        {
+            try {
+                $connection->reconnect();
+                usleep(500);
+            } catch (Exception $e){
+                $exception = $e;
+            }
+            --$retries;
+        }
+        if ($exception !== null){
+            $this->connError = $exception;
+            $this->connCreated = true;
+            return;
+        }
         $channel = $connection->channel();
         $this->config->apply($this->bufferRecv, $channel);
         while(true) {
             $rows = $this->bufferSend->fetchQuery();
+
             if ($rows === false) {
                 break ;
+            } elseif ($rows === null) {
+                    $channel->wait(null, true);
+            }else {
+                $channel->wait(null, true);
+                /**
+                 * @var Publish $publisher
+                 */
+                $publisher = igbinary_unserialize($rows);
+                $channel->basic_publish($publisher->getMessage(), $publisher->getExchange(), $publisher->getRoutingKey());
             }
-            /**
-             * @var ?Publish $publisher
-             */
-            $publisher = $rows === null ? null : igbinary_unserialize($rows);
-            $this->tick($connection, $channel, $publisher);
+            usleep(500);
         }
         $channel->close();
         $connection->close();
 	}
-
-    public function tick(AMQPStreamConnection $connection, AMQPChannel $channel, ?Publish $publisher = null): void
-    {
-        $start = microtime(true);
-        try {
-            $channel->wait(null, true, 10);
-            if ($publisher){
-                $channel->basic_publish($publisher->getMessage(), $publisher->getExchange(), $publisher->getRoutingKey());
-                $time = microtime(true) - $start;
-                if ($time < self::RABBIT_MQ_PER_TICK) {
-                    @time_sleep_until(microtime(true) + self::RABBIT_MQ_PER_TICK - $time);
-                }
-            }
-        } catch (AMQPTimeoutException) {
-            // something might be wrong, try to send heartbeat which involves select+write
-            $channel->getConnection()->checkHeartBeat();
-        } catch (AMQPNoDataException) {
-
-        } catch (AMQPConnectionClosedException)
-        {
-            $connection->reconnect();
-        }
-    }
 
     /**
      * @return QueryRecvQueue
