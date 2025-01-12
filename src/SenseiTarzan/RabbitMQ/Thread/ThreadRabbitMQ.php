@@ -84,15 +84,25 @@ class ThreadRabbitMQ extends Thread
 
             if ($rows === false) {
                 break ;
-            } elseif ($rows === null) {
-                    $channel->wait(null, true);
-            }else {
+            }
+            try
+            {
                 $channel->wait(null, true);
-                /**
-                 * @var Publish $publisher
-                 */
-                $publisher = igbinary_unserialize($rows);
-                $channel->basic_publish($publisher->getMessage(), $publisher->getExchange(), $publisher->getRoutingKey());
+            } catch(\Exception)
+            {
+                if (!$connection->isConnected())
+                    $connection->reconnect();
+            }
+            try {
+                if ($rows !== null) {
+                    /** @var Publish $publisher */
+                    $publisher = igbinary_unserialize($rows);
+                    $channel->basic_publish($publisher->getMessage(), $publisher->getExchange(), $publisher->getRoutingKey());
+                }
+            } catch(\Exception)
+            {
+                if (!$connection->isConnected())
+                    $connection->reconnect();
             }
             usleep(500);
         }
